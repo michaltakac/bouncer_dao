@@ -2,7 +2,26 @@
 
 
 const {ipcRenderer} = require('electron')
+const Instascan = require("instascan");
 let interval,timeout;
+
+let scanner = new Instascan.Scanner();
+
+scanner.addListener("scan", function (content) {
+  ipcRenderer.send("scan-initiated", content);
+});
+
+Instascan.Camera.getCameras()
+  .then(function (cameras) {
+    if (cameras.length > 0) {
+      scanner.start(cameras[0]);
+    } else {
+      console.error("No cameras found.");
+    }
+  })
+  .catch(function (e) {
+    console.error(e);
+  });
 
 function ready(fn) {
  if (document.attachEvent ? document.readyState === "complete" : document.readyState !== "loading"){
@@ -63,7 +82,7 @@ ipcRenderer.on('asynchronous-reply', (event, arg) => {
              inMessage.style.display = 'block';
 
              addClass(body, 'in-bg');
-           } 
+           }
 
            else {
              let waitingMessage = document.querySelectorAll('#waiting-message')[0];

@@ -9,103 +9,49 @@ const app = electron.app
 
 
 var accessService = require('./providers/accessService');
-var responseService = require('./providers/responseService');
-
-
-
-var express = require('express');
-var bodyParser = require("body-parser");
 
 
 var myWeb3= require('./providers/myWeb3');
 myWeb3.init(config.CONTRACT_ADDR,config.NODE_ADDR);
 
-var expressApp = express();
-expressApp.use(bodyParser.urlencoded({ extended: false }));
-expressApp.use(bodyParser.json());
-
 let mainWindow;
 let appStatus;
 
 function initApp() {
-  initHttpApp()
+  initScanningService()
   createWindow()
 }
 
-function initHttpApp() {
-
-
-  expressApp.post('/', function (req, res) {
-    console.log('got request');
-    // console.log(req);
-    let signature = req.body.signature
-    let address = req.body.address
-    let message = req.body.message
-
-    const signer = EthCrypto.recover(
-      signature,
-      EthCrypto.hash.keccak256(message)
-      );
-
-    if (signer == address) {
-      console.log("Signature validated!",address)
-
-      accessService.checkAccess(address)
-
-
-      .then((data)=>{
-        console.log('acess ok',data)
-        if(data){
-
-          responseService.respond( '{}',res);
+function initScanningService() {
+  ipcMain.on("scan-initiated", (event, arg) => {
+    // we're receiving it in format "ethereum:0xED0...5F41e"
+    let address = arg.split(":")[1];
+    accessService
+      .checkAccess(address)
+      .then(data => {
+        console.log("acess ok", data);
+        if (data) {
           appStatus = {
             allowed: true,
-            msg: 'Allowed'
-          }
-        }
-
-        else{
-          responseService.error( null,res);
+            msg: "Allowed"
+          };
+          event.sender.send("asynchronous-reply", appStatus);
+        } else {
           appStatus = {
-          allowed: false,
-          msg: 'Not on blockchain'
+            allowed: false,
+            msg: "Denied"
+          };
+          event.sender.send("asynchronous-reply", appStatus);
         }
-        }
-
-
-
       })
-      .catch((err)=>{
-         console.log('acess err',err)
-          responseService.error( err,res);
-          appStatus = {
+      .catch(err => {
+        console.log("access err", err);
+        appStatus = {
           allowed: false,
-          msg: 'Not on blockchain'
-        }
+          msg: "Denied"
+        };
+        event.sender.send("asynchronous-reply", appStatus);
       });
-    } 
-
-
-    else {
-      // signature validation failed
-      appStatus = {
-        allowed: false,
-        msg: 'Signature validation failed'
-      }
-
-      responseService.error( err,res);
-    }
-
-
-
-
-    // res.send('Ok');
-  });
-
-
-
-  expressApp.listen(8000, function () {
-    console.log('Example app listening on port 8000!');
   });
 
   ipcMain.on('asynchronous-message', (event, arg) => {
